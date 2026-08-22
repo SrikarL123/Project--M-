@@ -202,3 +202,55 @@ form button {
     background: #222;
     color: #fff;
 }
+
+/* Status badges */
+.status-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.status-open {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.status-submitted {
+    background: rgba(234, 179, 8, 0.15);
+    color: #eab308;
+    border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
+.status-completed {
+    background: rgba(168, 85, 247, 0.15);
+    color: #a855f7;
+    border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.status-cancelled {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.bounty-card a {
+    color: #a855f7;
+    text-decoration: underline;
+    word-break: break-all;
+}
+
+.bounty-card button {
+    margin-top: 12px;
+    margin-right: 10px;
+    background: #7c3aed;
+    color: white;
+    transition: opacity 0.2s;
+}
+
+.bounty-card button:hover {
+    opacity: 0.9;
+}
+
