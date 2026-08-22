@@ -5,7 +5,7 @@ export const CONTRACT_ADDRESS =
 export const BACKEND_URL = "http://127.0.0.1:5000";
 
 export const MONAD_TESTNET = {
-    chainId: "0x279f",
+    chainId: "10143",
     chainName: "Monad Testnet",
     nativeCurrency: {
         name: "MON",
