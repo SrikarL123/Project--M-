@@ -28,39 +28,52 @@ async function generateWithAI() {
     const prompt = aiPromptInput.value.trim();
 
     if (!prompt) {
-        aiStatus.textContent = "Please describe your task first.";
+        if (aiStatus) aiStatus.textContent = "Please describe your task first.";
         return;
     }
 
     aiGenerateBtn.disabled = true;
     aiGenerateBtn.textContent = "⏳ Generating...";
-    aiStatus.textContent = "AI is drafting your bounty...";
+    if (aiStatus) aiStatus.textContent = "AI is drafting your bounty...";
 
     try {
-        const endpoint = BACKEND_URL ? `${BACKEND_URL}/generate-bounty` : "/api/generate-bounty";
-        
-        let response;
-        try {
-            response = await fetch(endpoint, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    request: prompt
-                })
-            });
-        } catch (fetchErr) {
-            // Fallback try for Vercel alternative path rewrite
-            if (!BACKEND_URL && endpoint === "/api/generate-bounty") {
-                response = await fetch("/generate-bounty", {
+        const endpoints = BACKEND_URL
+            ? [`${BACKEND_URL}/generate-bounty`]
+            : [
+                "/api/generate_bounty",
+                "/api/generate-bounty",
+                "/generate-bounty"
+              ];
+
+        let response = null;
+        let lastError = null;
+
+        for (const endpoint of endpoints) {
+            try {
+                const res = await fetch(endpoint, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ request: prompt })
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        request: prompt
+                    })
                 });
-            } else {
-                throw fetchErr;
+
+                if (res.status !== 404) {
+                    response = res;
+                    break;
+                }
+            } catch (err) {
+                lastError = err;
             }
+        }
+
+        if (!response) {
+            throw new Error(
+                lastError?.message ||
+                "AI endpoint not found (HTTP 404). Please ensure the latest code is deployed on Vercel."
+            );
         }
 
         const result = await response.json().catch(() => ({}));
@@ -96,16 +109,20 @@ async function generateWithAI() {
             document.getElementById("deadline").value = iso;
         }
 
-        aiStatus.textContent =
-            `✅ Draft ready! Category: ${draft.category || "Other"} · ` +
-            `Difficulty: ${draft.difficulty || "Medium"} · ` +
-            `Skills: ${(draft.skills || []).join(", ")}. ` +
-            `Review and edit below, then create.`;
+        if (aiStatus) {
+            aiStatus.textContent =
+                `✅ Draft ready! Category: ${draft.category || "Other"} · ` +
+                `Difficulty: ${draft.difficulty || "Medium"} · ` +
+                `Skills: ${(draft.skills || []).join(", ")}. ` +
+                `Review and edit below, then create.`;
+        }
 
     } catch (error) {
         console.error("AI generation error:", error);
-        aiStatus.textContent =
-            `❌ ${error.message || "Could not reach AI service. You can still fill the form manually."}`;
+        if (aiStatus) {
+            aiStatus.textContent =
+                `❌ ${error.message || "Could not reach AI service. You can still fill the form manually."}`;
+        }
     } finally {
         aiGenerateBtn.disabled = false;
         aiGenerateBtn.textContent = "✨ Generate with AI";
@@ -127,29 +144,45 @@ async function connectWallet() {
     }
 
     try {
-        if (transactionStatus) {
-            transactionStatus.textContent = "Connecting to wallet...";
-        }
+        let accounts = [];
 
-        // Request account access using standard eth_requestAccounts
-        let accounts;
-        try {
-            accounts = await window.ethereum.request({
-                method: "eth_requestAccounts"
-            });
-        } catch (reqErr) {
-            // Fallback for wallet_requestPermissions if user clicked "Change Wallet"
-            if (currentAccount) {
-                await window.ethereum.request({
+        // If wallet is already connected, prompt MetaMask permission popup to pick another account
+        if (currentAccount) {
+            if (transactionStatus) {
+                transactionStatus.textContent = "Select an account in MetaMask...";
+            }
+
+            try {
+                const permissions = await window.ethereum.request({
                     method: "wallet_requestPermissions",
                     params: [{ eth_accounts: {} }]
                 });
-                accounts = await window.ethereum.request({
-                    method: "eth_accounts"
-                });
-            } else {
-                throw reqErr;
+
+                const accountsPermission = permissions.find(
+                    (p) => p.parentCapability === "eth_accounts"
+                );
+
+                if (accountsPermission && accountsPermission.caveats) {
+                    const caveat = accountsPermission.caveats.find(
+                        (c) => c.type === "filterResponse"
+                    );
+                    if (caveat && Array.isArray(caveat.value) && caveat.value.length > 0) {
+                        accounts = caveat.value;
+                    }
+                }
+            } catch (permErr) {
+                console.log("Permission modal closed or falling back:", permErr);
             }
+        }
+
+        // Standard fetch for active accounts if permissions didn't directly return it
+        if (!accounts || accounts.length === 0) {
+            if (transactionStatus) {
+                transactionStatus.textContent = "Connecting to MetaMask...";
+            }
+            accounts = await window.ethereum.request({
+                method: "eth_requestAccounts"
+            });
         }
 
         if (!accounts || accounts.length === 0) {
@@ -161,10 +194,8 @@ async function connectWallet() {
         // Switch to Monad Testnet
         await switchToMonad();
 
-        // Create ethers provider
+        // Create ethers provider & signer
         provider = new ethers.BrowserProvider(window.ethereum);
-
-        // Get signer
         signer = await provider.getSigner();
 
         // Connect contract
@@ -177,7 +208,7 @@ async function connectWallet() {
         window.bountyContract = contract;
 
         if (walletStatus) {
-            walletStatus.textContent = `Connected: ${shortAddress(currentAccount)}`;
+            walletStatus.innerHTML = `Connected: <strong>${shortAddress(currentAccount)}</strong> <span style="font-size:12px; color:#888;">(${currentAccount})</span>`;
         }
 
         if (connectButton) {
@@ -185,7 +216,7 @@ async function connectWallet() {
         }
 
         if (transactionStatus) {
-            transactionStatus.textContent = "Wallet connected successfully.";
+            transactionStatus.textContent = `Wallet connected: ${shortAddress(currentAccount)}`;
         }
 
         await loadBounties();
@@ -236,7 +267,7 @@ async function switchToMonad() {
 
 
 // ================================
-// CREATE BOUNTY
+// CREATE BOUNTY (CLIENT / CREATOR)
 // ================================
 
 async function createBounty(event) {
@@ -268,7 +299,7 @@ async function createBounty(event) {
         }
 
         if (transactionStatus) {
-            transactionStatus.textContent = "Confirm the transaction in MetaMask...";
+            transactionStatus.textContent = "Confirm bounty creation in MetaMask...";
         }
 
         const tx = await contract.createBounty(
@@ -287,7 +318,7 @@ async function createBounty(event) {
         await tx.wait();
 
         if (transactionStatus) {
-            transactionStatus.textContent = "✅ Bounty created successfully on Monad Testnet!";
+            transactionStatus.textContent = "✅ Bounty created & funded on Monad Testnet!";
         }
 
         bountyForm.reset();
@@ -319,7 +350,7 @@ async function loadBounties() {
         const bountyCount = Number(count);
 
         if (bountyCount === 0) {
-            bountiesContainer.innerHTML = "<p>No bounties available yet. Be the first to create one!</p>";
+            bountiesContainer.innerHTML = "<p>No bounties created yet. Be the first to create one!</p>";
             return;
         }
 
@@ -340,7 +371,7 @@ async function loadBounties() {
 
 
 // ================================
-// RENDER BOUNTY
+// RENDER BOUNTY CARD (ROLE-AWARE)
 // ================================
 
 function renderBounty(bounty) {
@@ -357,58 +388,79 @@ function renderBounty(bounty) {
     const submission = bounty.submission;
     const status = Number(bounty.status);
 
+    const isClient = currentAccount && client.toLowerCase() === currentAccount.toLowerCase();
+    const isDeveloper = currentAccount && developer.toLowerCase() === currentAccount.toLowerCase();
+    const zeroAddress = "0x0000000000000000000000000000000000000000";
+    const hasDeveloper = developer && developer.toLowerCase() !== zeroAddress;
+
     card.innerHTML = `
-        <h3>#${id} — ${escapeHTML(title)}</h3>
-        <p>${escapeHTML(description)}</p>
-        <p><strong>Reward:</strong> ${reward} MON</p>
-        <p><strong>Client:</strong> ${shortAddress(client)}</p>
-        <p><strong>Developer:</strong> ${shortAddress(developer)}</p>
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; gap:10px;">
+            <h3 style="margin:0; font-size:18px;">#${id} — ${escapeHTML(title)}</h3>
+            <span class="status-badge status-${formatStatus(status).toLowerCase()}">${formatStatus(status)}</span>
+        </div>
+        <p style="margin-bottom:12px; color:#ccc; line-height:1.5;">${escapeHTML(description)}</p>
+        <p><strong>Reward:</strong> <span style="color:#60a5fa; font-weight:bold;">${reward} MON</span></p>
+        <p><strong>Creator (Client):</strong> ${shortAddress(client)} ${isClient ? '<span style="color:#22c55e; font-weight:bold; margin-left:6px;">(You)</span>' : ''}</p>
+        <p><strong>Worker (Developer):</strong> ${hasDeveloper ? shortAddress(developer) : '<span style="color:#777;">None yet</span>'} ${isDeveloper ? '<span style="color:#a855f7; font-weight:bold; margin-left:6px;">(You)</span>' : ''}</p>
         <p><strong>Deadline:</strong> ${deadline}</p>
-        <p><strong>Status:</strong> <span class="status-badge status-${formatStatus(status).toLowerCase()}">${formatStatus(status)}</span></p>
         ${
             submission
-                ? `<p><strong>Submission:</strong> <a href="${escapeHTML(submission)}" target="_blank" rel="noopener noreferrer">${escapeHTML(submission)}</a></p>`
+                ? `<p style="margin-top:10px;"><strong>Proof Submission:</strong> <a href="${escapeHTML(submission)}" target="_blank" rel="noopener noreferrer" style="color:#a855f7; text-decoration:underline;">${escapeHTML(submission)} ↗</a></p>`
                 : ""
         }
     `;
 
-    const zeroAddress = "0x0000000000000000000000000000000000000000";
+    const actionsDiv = document.createElement("div");
+    actionsDiv.style.marginTop = "16px";
+    actionsDiv.style.display = "flex";
+    actionsDiv.style.gap = "10px";
+    actionsDiv.style.flexWrap = "wrap";
 
-    // SUBMIT WORK BUTTON (Worker)
-    if (
-        status === 0 &&
-        developer.toLowerCase() === zeroAddress &&
-        currentAccount &&
-        client.toLowerCase() !== currentAccount.toLowerCase()
-    ) {
+    // 1. SUBMIT WORK (for any worker wallet who is NOT the creator)
+    if (status === 0 && !isClient && currentAccount) {
         const submitButton = document.createElement("button");
-        submitButton.textContent = "Submit Work";
+        submitButton.textContent = "📥 Submit Work (as Worker)";
+        submitButton.style.background = "#7c3aed";
         submitButton.onclick = () => submitWork(id);
-        card.appendChild(submitButton);
+        actionsDiv.appendChild(submitButton);
     }
 
-    // APPROVE SUBMISSION BUTTON (Client)
-    if (
-        status === 1 &&
-        currentAccount &&
-        client.toLowerCase() === currentAccount.toLowerCase()
-    ) {
+    // 2. APPROVE SUBMISSION (for Creator only when work is submitted)
+    if (status === 1 && isClient) {
         const approveButton = document.createElement("button");
-        approveButton.textContent = "Approve Submission & Release MON";
+        approveButton.textContent = "✅ Approve & Release MON (as Creator)";
+        approveButton.style.background = "#16a34a";
         approveButton.onclick = () => approveSubmission(id);
-        card.appendChild(approveButton);
+        actionsDiv.appendChild(approveButton);
     }
 
-    // CANCEL BOUNTY BUTTON (Client)
-    if (
-        status === 0 &&
-        currentAccount &&
-        client.toLowerCase() === currentAccount.toLowerCase()
-    ) {
+    // 3. CANCEL BOUNTY (for Creator only when bounty is still open)
+    if (status === 0 && isClient) {
         const cancelButton = document.createElement("button");
-        cancelButton.textContent = "Cancel Bounty & Refund MON";
+        cancelButton.textContent = "❌ Cancel Bounty & Refund MON";
+        cancelButton.style.background = "#dc2626";
         cancelButton.onclick = () => cancelBounty(id);
-        card.appendChild(cancelButton);
+        actionsDiv.appendChild(cancelButton);
+    }
+
+    if (actionsDiv.children.length > 0) {
+        card.appendChild(actionsDiv);
+    } else if (status === 1 && !isClient) {
+        const notice = document.createElement("p");
+        notice.style.color = "#eab308";
+        notice.style.fontSize = "13px";
+        notice.style.marginTop = "12px";
+        notice.textContent = isDeveloper
+            ? "⏳ You submitted work! Awaiting creator approval to release MON."
+            : "⏳ Work submitted. Awaiting creator approval.";
+        card.appendChild(notice);
+    } else if (status === 0 && isClient) {
+        const notice = document.createElement("p");
+        notice.style.color = "#888";
+        notice.style.fontSize = "13px";
+        notice.style.marginTop = "12px";
+        notice.textContent = "💡 Switch to a different wallet in MetaMask to submit work as a worker.";
+        card.appendChild(notice);
     }
 
     bountiesContainer.appendChild(card);
@@ -416,80 +468,110 @@ function renderBounty(bounty) {
 
 
 // ================================
-// SUBMIT WORK
+// SUBMIT WORK (WORKER)
 // ================================
 
 async function submitWork(bountyId) {
-    const submission = prompt("Enter your submission URI or proof URL (e.g. GitHub PR / Demo link):");
+    const submission = prompt("Enter your proof URL (e.g. GitHub repo, PR, or live demo link):");
 
     if (!submission || !submission.trim()) {
         return;
     }
 
     try {
-        transactionStatus.textContent = "Confirm submission in MetaMask...";
+        if (transactionStatus) {
+            transactionStatus.textContent = "Confirm submission in MetaMask...";
+        }
 
         const tx = await contract.submitWork(bountyId, submission.trim());
 
-        transactionStatus.textContent = "Submitting work to Monad Testnet...";
+        if (transactionStatus) {
+            transactionStatus.textContent = "Submitting work to Monad Testnet...";
+        }
+
         await tx.wait();
 
-        transactionStatus.textContent = "✅ Work submitted successfully!";
+        if (transactionStatus) {
+            transactionStatus.textContent = "✅ Work submitted successfully on Monad!";
+        }
+
         await loadBounties();
 
     } catch (error) {
         console.error("Submit work error:", error);
-        transactionStatus.textContent = getErrorMessage(error);
+        if (transactionStatus) {
+            transactionStatus.textContent = getErrorMessage(error);
+        }
     }
 }
 
 
 // ================================
-// APPROVE SUBMISSION
+// APPROVE SUBMISSION (CREATOR)
 // ================================
 
 async function approveSubmission(bountyId) {
     try {
-        transactionStatus.textContent = "Confirm approval in MetaMask...";
+        if (transactionStatus) {
+            transactionStatus.textContent = "Confirm approval in MetaMask...";
+        }
 
         const tx = await contract.approveSubmission(bountyId);
 
-        transactionStatus.textContent = "Approving submission and releasing escrowed MON...";
+        if (transactionStatus) {
+            transactionStatus.textContent = "Releasing escrowed MON to worker...";
+        }
+
         await tx.wait();
 
-        transactionStatus.textContent = "✅ Submission approved! Escrowed MON released to developer.";
+        if (transactionStatus) {
+            transactionStatus.textContent = "✅ Submission approved! Escrowed MON transferred to worker.";
+        }
+
         await loadBounties();
 
     } catch (error) {
         console.error("Approve error:", error);
-        transactionStatus.textContent = getErrorMessage(error);
+        if (transactionStatus) {
+            transactionStatus.textContent = getErrorMessage(error);
+        }
     }
 }
 
 
 // ================================
-// CANCEL BOUNTY
+// CANCEL BOUNTY (CREATOR)
 // ================================
 
 async function cancelBounty(bountyId) {
-    if (!confirm("Are you sure you want to cancel this bounty and receive your refund?")) {
+    if (!confirm("Are you sure you want to cancel this bounty and refund your escrowed MON?")) {
         return;
     }
 
     try {
-        transactionStatus.textContent = "Confirm cancellation in MetaMask...";
+        if (transactionStatus) {
+            transactionStatus.textContent = "Confirm cancellation in MetaMask...";
+        }
 
         const tx = await contract.cancelBounty(bountyId);
 
-        transactionStatus.textContent = "Cancelling bounty and refunding escrowed MON...";
+        if (transactionStatus) {
+            transactionStatus.textContent = "Cancelling bounty and refunding escrowed MON...";
+        }
+
         await tx.wait();
 
-        transactionStatus.textContent = "✅ Bounty cancelled. Escrowed MON refunded to your wallet.";
+        if (transactionStatus) {
+            transactionStatus.textContent = "✅ Bounty cancelled. Escrowed MON refunded to your wallet.";
+        }
+
         await loadBounties();
 
     } catch (error) {
         console.error("Cancel error:", error);
-        transactionStatus.textContent = getErrorMessage(error);
+        if (transactionStatus) {
+            transactionStatus.textContent = getErrorMessage(error);
+        }
     }
 }
 
@@ -552,7 +634,7 @@ if (aiGenerateBtn) {
 
 
 // ================================
-// METAMASK ACCOUNT & CHAIN EVENTS
+// METAMASK LIVE ACCOUNT SWITCH LISTENER
 // ================================
 
 if (window.ethereum) {
@@ -566,6 +648,7 @@ if (window.ethereum) {
             if (walletStatus) walletStatus.textContent = "Wallet not connected";
             if (connectButton) connectButton.textContent = "Connect Wallet";
             if (bountiesContainer) bountiesContainer.innerHTML = "<p>Connect your wallet to view bounties.</p>";
+            if (transactionStatus) transactionStatus.textContent = "Wallet disconnected.";
             return;
         }
 
@@ -576,13 +659,19 @@ if (window.ethereum) {
             contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
             window.bountyContract = contract;
 
-            if (walletStatus) walletStatus.textContent = `Connected: ${shortAddress(currentAccount)}`;
-            if (connectButton) connectButton.textContent = "Change Wallet";
-            if (transactionStatus) transactionStatus.textContent = "Account changed.";
+            if (walletStatus) {
+                walletStatus.innerHTML = `Connected: <strong>${shortAddress(currentAccount)}</strong> <span style="font-size:12px; color:#888;">(${currentAccount})</span>`;
+            }
+            if (connectButton) {
+                connectButton.textContent = "Change Wallet";
+            }
+            if (transactionStatus) {
+                transactionStatus.textContent = `Active account changed to ${shortAddress(currentAccount)}.`;
+            }
 
             await loadBounties();
         } catch (error) {
-            console.error("Account change error:", error);
+            console.error("Account change listener error:", error);
         }
     });
 
