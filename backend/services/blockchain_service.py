@@ -15,7 +15,7 @@ MONAD_TESTNET_RPC = "https://testnet-rpc.monad.xyz"
 MONAD_TESTNET_CHAIN_ID = 10143
 
 # Will be populated from shared/contract/ after Srikar's handoff
-CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS", "")
+CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS", "0xe9cA989dDa5d6Ebf3bAE29CA470ACad0768751e5")
 CONTRACT_ABI = []  # Load from shared/contract/MonadBounty.abi.json after deployment
 
 # --- Bounty status enum (mirrors contract) ---

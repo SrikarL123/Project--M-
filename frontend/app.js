@@ -1,5 +1,5 @@
 import ABI from "./BountyFlow.abi.json" with { type: "json" };
-import { CONTRACT_ADDRESS, MONAD_TESTNET } from "./contract-config.js";
+import { CONTRACT_ADDRESS, BACKEND_URL, MONAD_TESTNET } from "./contract-config.js";
 import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@6.15.0/+esm";
 
 let provider = null;
@@ -13,6 +13,104 @@ const bountyForm = document.getElementById("bountyForm");
 const transactionStatus = document.getElementById("transactionStatus");
 const bountiesContainer = document.getElementById("bounties");
 const refreshButton = document.getElementById("refreshBounties");
+const aiGenerateBtn = document.getElementById("aiGenerateBtn");
+const aiPromptInput = document.getElementById("aiPrompt");
+const aiStatus = document.getElementById("aiStatus");
+
+
+// ================================
+// AI BOUNTY GENERATION
+// ================================
+
+async function generateWithAI() {
+
+    const prompt = aiPromptInput.value.trim();
+
+    if (!prompt) {
+        aiStatus.textContent =
+            "Please describe your task first.";
+        return;
+    }
+
+    aiGenerateBtn.disabled = true;
+    aiGenerateBtn.textContent = "⏳ Generating...";
+    aiStatus.textContent =
+        "AI is drafting your bounty...";
+
+    try {
+
+        const response = await fetch(
+            `${BACKEND_URL}/generate-bounty`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type":
+                        "application/json"
+                },
+                body: JSON.stringify({
+                    request: prompt
+                })
+            }
+        );
+
+        const result = await response.json();
+
+        if (!result.success) {
+            throw new Error(
+                result.error ||
+                "AI generation failed"
+            );
+        }
+
+        const draft = result.data;
+
+        // Fill form fields with AI response
+        document.getElementById("title")
+            .value = draft.title || "";
+
+        document.getElementById("description")
+            .value = draft.description || "";
+
+        document.getElementById("reward")
+            .value = draft.reward || "";
+
+        // Set deadline to draft hours from now
+        if (draft.deadline) {
+            const deadlineDate = new Date(
+                Date.now() +
+                draft.deadline * 60 * 60 * 1000
+            );
+            const iso = deadlineDate
+                .toISOString()
+                .slice(0, 16);
+            document.getElementById("deadline")
+                .value = iso;
+        }
+
+        aiStatus.textContent =
+            `✅ Draft ready! Category: ${draft.category || "Other"} · ` +
+            `Difficulty: ${draft.difficulty || "Medium"} · ` +
+            `Skills: ${(draft.skills || []).join(", ")}. ` +
+            `Review and edit below, then create.`;
+
+    } catch (error) {
+
+        console.error(
+            "AI generation error:",
+            error
+        );
+
+        aiStatus.textContent =
+            `❌ ${error.message || "Could not reach AI service. You can still fill the form manually."}`;
+
+    } finally {
+
+        aiGenerateBtn.disabled = false;
+        aiGenerateBtn.textContent =
+            "✨ Generate with AI";
+    }
+}
+
 
 
 // ================================
@@ -690,6 +788,11 @@ bountyForm.addEventListener(
 refreshButton.addEventListener(
     "click",
     loadBounties
+);
+
+aiGenerateBtn.addEventListener(
+    "click",
+    generateWithAI
 );
 
 

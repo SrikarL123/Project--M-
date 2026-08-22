@@ -133,3 +133,72 @@ form button {
     margin-top: 15px;
     color: #aaa;
 }
+
+/* Testnet notice */
+.testnet-notice {
+    margin-top: 20px;
+    padding: 10px 20px;
+    background: rgba(255, 200, 50, 0.1);
+    border: 1px solid rgba(255, 200, 50, 0.3);
+    border-radius: 8px;
+    color: #ffc832;
+    font-size: 14px;
+    text-align: center;
+}
+
+/* AI generation section */
+.ai-section {
+    margin-bottom: 20px;
+}
+
+.ai-section label {
+    display: block;
+    margin-bottom: 8px;
+    color: #aaa;
+    font-size: 14px;
+}
+
+.ai-input-row {
+    display: flex;
+    gap: 10px;
+}
+
+.ai-input-row input {
+    flex: 1;
+}
+
+#aiGenerateBtn {
+    background: linear-gradient(135deg, #7c3aed, #a855f7);
+    color: white;
+    white-space: nowrap;
+    padding: 12px 20px;
+    transition: opacity 0.2s;
+}
+
+#aiGenerateBtn:hover {
+    opacity: 0.85;
+}
+
+#aiGenerateBtn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.ai-status {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #a855f7;
+    min-height: 20px;
+}
+
+.divider {
+    border: none;
+    border-top: 1px solid #222;
+    margin: 20px 0;
+}
+
+/* Refresh button */
+#refreshBounties {
+    background: #222;
+    color: #fff;
+}
