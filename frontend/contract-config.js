@@ -13,7 +13,7 @@ const isLocalhost =
 export const BACKEND_URL = isLocalhost ? "http://127.0.0.1:5000" : "";
 
 export const MONAD_TESTNET = {
-    chainId: "10143",
+    chainId: "0x279f",
     chainName: "Monad Testnet",
     nativeCurrency: {
         name: "MON",
