@@ -1,4 +1,4 @@
-import ABI from "./BountyFlow.abi.json" with { type: "json" };
+import ABI from "./abi.js";
 import { CONTRACT_ADDRESS, MONAD_TESTNET } from "./contract-config.js";
 import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@6.15.0/+esm";
 
