@@ -1,0 +1,12 @@
+# Foundry
+out/
+cache/
+broadcast/
+
+# Environment / secrets
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+.vscode/
