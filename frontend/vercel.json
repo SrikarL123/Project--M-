@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/api/generate-bounty", "destination": "/api/generate_bounty" },
+    { "source": "/generate-bounty", "destination": "/api/generate_bounty" }
+  ]
+}
